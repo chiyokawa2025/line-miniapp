@@ -6,7 +6,7 @@
   <title>LINEミニアプリ 最小構成（QR会員証＋予約）</title>
   <!-- LIFF SDK -->
   <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
-  <!-- QR生成ライブラリ（davidshimjs/qrcodejs） -->
+  <!-- QR生成ライブラリ -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"
           integrity="sha512-M6x1o0rF4GZk8H0Nf9oE7cJ1mGz7iP4f1o8x5yqWwK2ENtHq3hF8dCOTbqvQ5v3rXy4cQmYoVnqE6Vb9Gf2c4w=="
           crossorigin="anonymous" referrerpolicy="no-referrer"></script>
@@ -53,76 +53,58 @@
       <a id="reserveBtn" class="button" href="#" target="_blank" rel="noopener">予約する（Googleフォーム）</a>
       <div class="small">※ フォームの項目ID（entry.XXXX）を置き換えてください。</div>
     </section>
-
-    <section class="card">
-      <div class="label">開発メモ</div>
-      <ul style="margin:8px 0 0 18px;">
-        <li>このページは LIFF v2 で動作。<span class="mono">LIFF_ID</span> を差し替え、LINE Developers に登録してください。</li>
-        <li>QRの中身は <span class="mono">{app}:{tenant}:{userId}</span> 形式。必要に応じて変更可。</li>
-        <li>フォームの事前入力は Googleフォームの「事前入力」機能で entry ID を取得して置換。</li>
-      </ul>
-    </section>
   </main>
 
 <script>
-/** ←―――――――――――――――――――――――――――――――――――――――
- * 設定：ここを書き換える
- * ――――――――――――――――――――――――――――――――――――――― */
-const LIFF_ID = "2008188800-W0OZd8YD"; // 例: 2000123456-xxxxxxx
-const TENANT  = "sarco";                     // 店舗/組織識別子（任意）
-const APPKEY  = "member";                    // アプリ識別子（任意）
+/* ===== 設定（ここだけ変更） ===== */
+const LIFF_ID = "2008188800-W0OZd8YD";      // 先生の LIFF ID
+const TENANT  = "sarco";                     // 任意
+const APPKEY  = "member";                    // 任意
+// 例: https://docs.google.com/forms/d/e/FORM_ID/viewform?usp=pp_url&entry.11111={USER_ID}&entry.22222={DISPLAY_NAME}
+const GOOGLE_FORM_BASE   = "https://docs.google.com/forms/d/e/REPLACE_FORM_ID/viewform?usp=pp_url";
+const FORM_ENTRY_USERID  = "entry.1111111111"; // ← フォームの事前入力IDに置換
+const FORM_ENTRY_NAME    = "entry.2222222222"; // ← フォームの事前入力IDに置換
+/* ================================= */
 
-// Googleフォーム（事前入力URLを使う）
-// 例: https://docs.google.com/forms/d/e/FORM_ID/viewform?usp=pp_url&entry.1111111111={USER_ID}&entry.2222222222={DISPLAY_NAME}
-const GOOGLE_FORM_BASE = "https://docs.google.com/forms/d/e/REPLACE_FORM_ID/viewform?usp=pp_url";
-const FORM_ENTRY_USERID = "entry.1111111111";     // ← 事前入力で得た項目ID（ユーザーID用）
-const FORM_ENTRY_NAME   = "entry.2222222222";     // ← 事前入力で得た項目ID（お名前/表示名用)
-/** ――――――――――――――――――――――――――――――――――――――― */
-
-// ユーティリティ
 const mask = (s) => s ? (s.slice(0,6) + "..." + s.slice(-4)) : "-";
 
-// LIFF 初期化 → プロフィール取得 → 表示
 async function bootstrap() {
   await liff.init({ liffId: LIFF_ID });
 
-// ★LINEアプリ内では login() を呼ばない
-if (!liff.isInClient() && !liff.isLoggedIn()) {
-  liff.login({ redirectUri: location.href });
-  return;
-}
-
+  // ★LINEアプリ内では login() を呼ばず、外部ブラウザの時だけログイン
+  if (!liff.isInClient() && !liff.isLoggedIn()) {
+    liff.login({ redirectUri: location.href });
+    return;
   }
 
   // プロフィール取得
-  const prof = await liff.getProfile(); // { userId, displayName, pictureUrl, statusMessage }
-  const idToken = liff.getIDToken();    // 必要ならバックエンド検証用
+  const prof = await liff.getProfile();              // { userId, displayName, pictureUrl... }
+  // 保険: Scopeに 'openid' を入れていればIDトークンからも取得可能
+  const decoded = liff.getDecodedIDToken && liff.getDecodedIDToken();
+  const userId  = prof.userId || (decoded && decoded.sub) || "";
 
   // 画面反映
   document.getElementById('displayName').textContent = prof.displayName || "-";
-  document.getElementById('uidMask').textContent = `userId: ${mask(prof.userId)}`;
-  const avatar = document.getElementById('avatar');
-  avatar.src = prof.pictureUrl || "https://static.line-scdn.net/liff/edge/2/sdk.png";
+  document.getElementById('uidMask').textContent     = `userId: ${mask(userId)}`;
+  document.getElementById('avatar').src              = prof.pictureUrl || "https://static.line-scdn.net/liff/edge/2/sdk.png";
 
-  // 会員証QR生成
-  generateQR(makeQRPayload(prof.userId));
+  // QR生成
+  generateQR(makeQRPayload(userId));
 
   // 予約ボタン（事前入力リンク）
-  const reserve = document.getElementById('reserveBtn');
   const url = new URL(GOOGLE_FORM_BASE);
-  url.searchParams.set(FORM_ENTRY_USERID, prof.userId || "");
+  url.searchParams.set(FORM_ENTRY_USERID, userId || "");
   url.searchParams.set(FORM_ENTRY_NAME,   prof.displayName || "");
-  reserve.href = url.toString();
+  document.getElementById('reserveBtn').href = url.toString();
 
   // 再生成ボタン
   document.getElementById('refreshBtn').addEventListener('click', () => {
-    generateQR(makeQRPayload(prof.userId));
+    generateQR(makeQRPayload(userId));
   });
 }
 
 function makeQRPayload(userId) {
-  // 店舗側読み取り用のペイロード設計（必要に応じて変更）
-  // 例: sarco:member:Uxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+  // 店舗側読み取り用のペイロード（必要に応じて設計変更OK）
   return `${TENANT}:${APPKEY}:${userId}`;
 }
 
@@ -140,7 +122,7 @@ function generateQR(text) {
 
 bootstrap().catch(err => {
   console.error(err);
-  alert("初期化に失敗しました。LIFF設定やネットワークを確認してください。");
+  alert("初期化に失敗しました。LIFF設定（ScopeやID）を確認してください。");
 });
 </script>
 </body>
