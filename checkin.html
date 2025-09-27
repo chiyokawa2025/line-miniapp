@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>チェックイン（スタッフ用）</title>
+  <title>チェックイン（スタッフ用） v13</title>
   <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
   <style>
     body{font-family:system-ui,-apple-system,Roboto,Arial;margin:0;background:#f6f7f8}
@@ -30,16 +30,13 @@
 </main>
 
 <script>
-<script>
 const LIFF_ID = "2008188800-9mKYLPR3"; // スタッフ用 LIFF ID
-const APP_VER = "v12";                 // 表示確認用
+const APP_VER = "v13";                  // 画面に [v13] と表示させて更新確認
 
 function log(msg, cls=""){
   const s = document.getElementById("status");
   if (s) { s.textContent = `[${APP_VER}] ` + msg; s.className = "mono " + cls; }
 }
-
-// 予期せぬJSエラーも画面に出す
 window.addEventListener("error", e => log("JSエラー: " + e.message, "err"));
 
 function dumpState(where){
@@ -50,7 +47,6 @@ function dumpState(where){
 async function run(){
   try{
     log("LIFF初期化開始...", "");
-    // 7秒タイムアウト付きで init
     await Promise.race([
       liff.init({ liffId: LIFF_ID }),
       new Promise((_,rej)=>setTimeout(()=>rej(new Error("liff.init timeout")), 7000))
@@ -80,8 +76,6 @@ async function run(){
     log("初期化エラー: " + (e?.message||e), "err");
   }
 }
-
-// DOMができてから実行（＝headに置いても安全）
 window.addEventListener("DOMContentLoaded", run);
 </script>
 </body>
