@@ -30,60 +30,59 @@
 </main>
 
 <script>
-const LIFF_ID = "2008188800-9mKYLPR3"; // スタッフ用
+<script>
+const LIFF_ID = "2008188800-9mKYLPR3"; // スタッフ用 LIFF ID
+const APP_VER = "v12";                 // 表示確認用
 
-// 画面ログ
-function log(msg, cls=""){ const el=document.getElementById("status"); el.textContent=msg; el.className="mono "+cls; }
-window.addEventListener("error", e => log("JSエラー: "+e.message, "err"));
-
-// デバッグ用: 状態を見せる
-function dumpState(where){
-  const s = `@${where}
-  inClient=${liff.isInClient?.()}
-  loggedIn=${liff.isLoggedIn?.()}
-  ver=${liff.getVersion?.?.() || "?"}`;
-  console.log(s); log(s, "ok");
+function log(msg, cls=""){
+  const s = document.getElementById("status");
+  if (s) { s.textContent = `[${APP_VER}] ` + msg; s.className = "mono " + cls; }
 }
 
-async function main(){
+// 予期せぬJSエラーも画面に出す
+window.addEventListener("error", e => log("JSエラー: " + e.message, "err"));
+
+function dumpState(where){
+  const txt = `@${where} inClient=${liff.isInClient?.()} / loggedIn=${liff.isLoggedIn?.()}`;
+  console.log(txt); log(txt, "ok");
+}
+
+async function run(){
   try{
     log("LIFF初期化開始...", "");
-
-    // 7秒でタイムアウトさせて必ず原因表示
+    // 7秒タイムアウト付きで init
     await Promise.race([
       liff.init({ liffId: LIFF_ID }),
       new Promise((_,rej)=>setTimeout(()=>rej(new Error("liff.init timeout")), 7000))
     ]);
-
     dumpState("after init");
 
-    // LINEアプリ外で未ログインならログイン
     if (!liff.isInClient() && !liff.isLoggedIn()){
       log("ログインへ遷移...", "");
       liff.login({ redirectUri: location.href });
       return;
     }
 
-    // スキャン
-    document.getElementById("scanBtn").addEventListener("click", async()=>{
+    document.getElementById("scanBtn").addEventListener("click", async ()=>{
       try{
         log("カメラ起動中...", "");
         const r = await liff.scanCodeV2();
         document.getElementById("result").textContent = r?.value || "(空)";
         log("読み取り成功", "ok");
       }catch(e){
-        log("スキャンエラー: "+(e?.message||e), "err");
-        alert("スキャンに失敗: "+(e?.message||e));
+        log("スキャンエラー: " + (e?.message||e), "err");
+        alert("スキャンに失敗: " + (e?.message||e));
       }
     });
 
     log("準備OK。スキャンできます。", "ok");
   }catch(e){
-    // ここに来たら init で落ちています
-    log("初期化エラー: "+(e?.message||e), "err");
+    log("初期化エラー: " + (e?.message||e), "err");
   }
 }
-main();
+
+// DOMができてから実行（＝headに置いても安全）
+window.addEventListener("DOMContentLoaded", run);
 </script>
 </body>
 </html>
