@@ -1,79 +1,42 @@
-<!doctype html>
-<html lang="ja">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>チェックイン（スタッフ用）</title>
-  <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
-  <style>
-    body{font-family:system-ui,-apple-system,Roboto,Arial;margin:0;background:#f6f7f8}
-    header{background:#111;color:#fff;padding:14px 18px;font-weight:700}
-    main{padding:18px;display:grid;gap:16px}
-    button{padding:14px 16px;font-weight:700;border-radius:12px;border:0;background:#111;color:#fff}
-    .card{background:#fff;border:1px solid #eee;border-radius:14px;padding:16px}
-    .mono{font:14px ui-monospace,monospace;word-break:break-all}
-    .ok{color:#0a7}
-    .err{color:#c00}
-  </style>
-</head>
-<body>
-<header>チェックイン受付（スタッフ用）</header>
-<main>
-  <div class="card">
-    <div id="status" class="mono">初期化中...</div>
-  </div>
-  <button id="scanBtn">QRコードをスキャン</button>
-  <div class="card">
-    <div>読み取り結果：</div>
-    <div id="result" class="mono">-</div>
-  </div>
-</main>
-
 <script>
-const LIFF_ID = "2008188800-9mKYLPR3";  // ←後で差し替え
+const LIFF_ID = "2008188800-9mKYLPR3";  // ← ここにスタッフ用の LIFF ID
 
-const log = (msg, cls="")=>{
+function log(msg, cls = "") {
   const s = document.getElementById("status");
-  s.textContent = msg; s.className = "mono " + cls;
-};
+  s.textContent = msg;
+  s.className = "mono " + cls;
+}
 
 async function main(){
-  try{
-    log("LIFF初期化...", "");
-    await liff.init({ liffId:2008188800-9mKYLPR3});
-    log(`inClient=${liff.isInClient()} / loggedIn=${liff.isLoggedIn()}`, "ok");
+  try {
+    log("LIFF初期化中...", "");
+    await liff.init({ liffId: LIFF_ID });
+    log(`初期化OK inClient=${liff.isInClient()} / loggedIn=${liff.isLoggedIn()}`, "ok");
 
-    // 外部ブラウザで未ログインならログイン
-    if (!liff.isInClient() && !liff.isLoggedIn()){ 
+    // LINEアプリ外ならログイン処理
+    if (!liff.isInClient() && !liff.isLoggedIn()) {
       log("ログインへ遷移します...", "");
-      liff.login({ redirectUri: location.href }); 
+      liff.login({ redirectUri: location.href });
       return;
     }
 
-    document.getElementById("scanBtn").addEventListener("click", async ()=>{
-      try{
-        const r = await liff.scanCodeV2();          // ← スキャン
-        const text = r?.value || "";
+    // スキャンボタンを押したときの処理
+    document.getElementById("scanBtn").addEventListener("click", async () => {
+      try {
+        const r = await liff.scanCodeV2();   // ← QRスキャン
+        const text = r.value || "";
         document.getElementById("result").textContent = text || "(空)";
         log("読み取り成功", "ok");
-
-        // ここでGAS等に送信する場合（あとで設定）
-        // await fetch("YOUR_GAS_WEBAPP_URL", {
-        //   method: "POST",
-        //   headers: { "Content-Type": "application/json" },
-        //   body: JSON.stringify({ payload: text })
-        // });
-      }catch(e){
+      } catch(e) {
         log("スキャンエラー: " + e, "err");
         alert("スキャンに失敗しました: " + e);
       }
     });
-  }catch(e){
+
+  } catch(e) {
     log("初期化エラー: " + e, "err");
-    alert("初期化に失敗: " + e);
   }
 }
+
 main();
 </script>
-</body>
-</html>
