@@ -30,47 +30,57 @@
 </main>
 
 <script>
-const LIFF_ID = "2008188800-9mKYLPR3";  // ←後で差し替え
+const LIFF_ID = "2008188800-9mKYLPR3"; // スタッフ用
 
-const log = (msg, cls="")=>{
-  const s = document.getElementById("status");
-  s.textContent = msg; s.className = "mono " + cls;
-};
+// 画面ログ
+function log(msg, cls=""){ const el=document.getElementById("status"); el.textContent=msg; el.className="mono "+cls; }
+window.addEventListener("error", e => log("JSエラー: "+e.message, "err"));
+
+// デバッグ用: 状態を見せる
+function dumpState(where){
+  const s = `@${where}
+  inClient=${liff.isInClient?.()}
+  loggedIn=${liff.isLoggedIn?.()}
+  ver=${liff.getVersion?.?.() || "?"}`;
+  console.log(s); log(s, "ok");
+}
 
 async function main(){
   try{
-    log("LIFF初期化...", "");
-    await liff.init({ liffId:2008188800-9mKYLPR3 });
-    log(`inClient=${liff.isInClient()} / loggedIn=${liff.isLoggedIn()}`, "ok");
+    log("LIFF初期化開始...", "");
 
-    // 外部ブラウザで未ログインならログイン
-    if (!liff.isInClient() && !liff.isLoggedIn()){ 
-      log("ログインへ遷移します...", "");
-      liff.login({ redirectUri: location.href }); 
+    // 7秒でタイムアウトさせて必ず原因表示
+    await Promise.race([
+      liff.init({ liffId: LIFF_ID }),
+      new Promise((_,rej)=>setTimeout(()=>rej(new Error("liff.init timeout")), 7000))
+    ]);
+
+    dumpState("after init");
+
+    // LINEアプリ外で未ログインならログイン
+    if (!liff.isInClient() && !liff.isLoggedIn()){
+      log("ログインへ遷移...", "");
+      liff.login({ redirectUri: location.href });
       return;
     }
 
-    document.getElementById("scanBtn").addEventListener("click", async ()=>{
+    // スキャン
+    document.getElementById("scanBtn").addEventListener("click", async()=>{
       try{
-        const r = await liff.scanCodeV2();          // ← スキャン
-        const text = r?.value || "";
-        document.getElementById("result").textContent = text || "(空)";
+        log("カメラ起動中...", "");
+        const r = await liff.scanCodeV2();
+        document.getElementById("result").textContent = r?.value || "(空)";
         log("読み取り成功", "ok");
-
-        // ここでGAS等に送信する場合（あとで設定）
-        // await fetch("YOUR_GAS_WEBAPP_URL", {
-        //   method: "POST",
-        //   headers: { "Content-Type": "application/json" },
-        //   body: JSON.stringify({ payload: text })
-        // });
       }catch(e){
-        log("スキャンエラー: " + e, "err");
-        alert("スキャンに失敗しました: " + e);
+        log("スキャンエラー: "+(e?.message||e), "err");
+        alert("スキャンに失敗: "+(e?.message||e));
       }
     });
+
+    log("準備OK。スキャンできます。", "ok");
   }catch(e){
-    log("初期化エラー: " + e, "err");
-    alert("初期化に失敗: " + e);
+    // ここに来たら init で落ちています
+    log("初期化エラー: "+(e?.message||e), "err");
   }
 }
 main();
