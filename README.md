@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>LINEミニアプリ 最小構成（QR会員証＋予約）</title>
+  <!-- LIFF SDK -->
+  <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+  <!-- QR生成ライブラリ（davidshimjs/qrcodejs） -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"
+          integrity="sha512-M6x1o0rF4GZk8H0Nf9oE7cJ1mGz7iP4f1o8x5yqWwK2ENtHq3hF8dCOTbqvQ5v3rXy4cQmYoVnqE6Vb9Gf2c4w=="
+          crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <style>
+    body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; margin: 0; background:#f7f7f8; color:#111; }
+    header { padding: 16px 20px; background:#fff; position:sticky; top:0; border-bottom:1px solid #eee; }
+    h1 { font-size:18px; margin:0; }
+    main { padding: 20px; display:grid; gap:16px; }
+    .card { background:#fff; border:1px solid #eee; border-radius:16px; padding:16px; box-shadow:0 1px 2px rgba(0,0,0,.03);}
+    .row { display:flex; align-items:center; gap:12px; }
+    .avatar { width:48px; height:48px; border-radius:50%; object-fit:cover; background:#eee; }
+    .label { font-size:12px; color:#666; }
+    #qrcode { width: 200px; height: 200px; margin: 12px auto 6px; }
+    button, a.button { width:100%; display:inline-block; text-align:center; padding:12px 14px; border-radius:12px; border:1px solid #ddd; background:#111; color:#fff; font-weight:600; cursor:pointer; text-decoration:none;}
+    .ghost { background:#fff; color:#111; }
+    .small { font-size:12px; color:#666; text-align:center; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size:12px; }
+  </style>
+</head>
+<body>
+  <header><h1>会員証 & 予約（最小サンプル）</h1></header>
+  <main>
+    <section class="card" id="userCard">
+      <div class="row">
+        <img id="avatar" class="avatar" alt="profile" />
+        <div>
+          <div class="label">ようこそ</div>
+          <div id="displayName">-</div>
+          <div class="label mono" id="uidMask">userId: -</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card" id="cardQR">
+      <div class="label">会員証（QRコード）</div>
+      <div id="qrcode"></div>
+      <div class="small">店舗側はこのQRを読み取ってチェックイン等に利用</div>
+      <button class="ghost" id="refreshBtn">QRを再生成</button>
+    </section>
+
+    <section class="card">
+      <div class="label">予約フォーム</div>
+      <p style="margin:8px 0 12px;">LINEで紐づいたID/お名前を自動入力してGoogleフォームへ遷移します。</p>
+      <a id="reserveBtn" class="button" href="#" target="_blank" rel="noopener">予約する（Googleフォーム）</a>
+      <div class="small">※ フォームの項目ID（entry.XXXX）を置き換えてください。</div>
+    </section>
+
+    <section class="card">
+      <div class="label">開発メモ</div>
+      <ul style="margin:8px 0 0 18px;">
+        <li>このページは LIFF v2 で動作。<span class="mono">LIFF_ID</span> を差し替え、LINE Developers に登録してください。</li>
+        <li>QRの中身は <span class="mono">{app}:{tenant}:{userId}</span> 形式。必要に応じて変更可。</li>
+        <li>フォームの事前入力は Googleフォームの「事前入力」機能で entry ID を取得して置換。</li>
+      </ul>
+    </section>
+  </main>
+
+<script>
+/** ←―――――――――――――――――――――――――――――――――――――――
+ * 設定：ここを書き換える
+ * ――――――――――――――――――――――――――――――――――――――― */
+const LIFF_ID = "2000123456-abcd1234"; // 例: 2000123456-xxxxxxx
+const TENANT  = "sarco";                     // 店舗/組織識別子（任意）
+const APPKEY  = "member";                    // アプリ識別子（任意）
+
+// Googleフォーム（事前入力URLを使う）
+// 例: https://docs.google.com/forms/d/e/FORM_ID/viewform?usp=pp_url&entry.1111111111={USER_ID}&entry.2222222222={DISPLAY_NAME}
+const GOOGLE_FORM_BASE = "https://docs.google.com/forms/d/e/REPLACE_FORM_ID/viewform?usp=pp_url";
+const FORM_ENTRY_USERID = "entry.1111111111";     // ← 事前入力で得た項目ID（ユーザーID用）
+const FORM_ENTRY_NAME   = "entry.2222222222";     // ← 事前入力で得た項目ID（お名前/表示名用)
+/** ――――――――――――――――――――――――――――――――――――――― */
+
+// ユーティリティ
+const mask = (s) => s ? (s.slice(0,6) + "..." + s.slice(-4)) : "-";
+
+// LIFF 初期化 → プロフィール取得 → 表示
+async function bootstrap() {
+  await liff.init({ liffId: LIFF_ID });
+
+  // LINE外ブラウザ対策：ログイン誘導
+  if (!liff.isLoggedIn()) {
+    liff.login(); // ここで戻ってくる
+    return;
+  }
+
+  // プロフィール取得
+  const prof = await liff.getProfile(); // { userId, displayName, pictureUrl, statusMessage }
+  const idToken = liff.getIDToken();    // 必要ならバックエンド検証用
+
+  // 画面反映
+  document.getElementById('displayName').textContent = prof.displayName || "-";
+  document.getElementById('uidMask').textContent = `userId: ${mask(prof.userId)}`;
+  const avatar = document.getElementById('avatar');
+  avatar.src = prof.pictureUrl || "https://static.line-scdn.net/liff/edge/2/sdk.png";
+
+  // 会員証QR生成
+  generateQR(makeQRPayload(prof.userId));
+
+  // 予約ボタン（事前入力リンク）
+  const reserve = document.getElementById('reserveBtn');
+  const url = new URL(GOOGLE_FORM_BASE);
+  url.searchParams.set(FORM_ENTRY_USERID, prof.userId || "");
+  url.searchParams.set(FORM_ENTRY_NAME,   prof.displayName || "");
+  reserve.href = url.toString();
+
+  // 再生成ボタン
+  document.getElementById('refreshBtn').addEventListener('click', () => {
+    generateQR(makeQRPayload(prof.userId));
+  });
+}
+
+function makeQRPayload(userId) {
+  // 店舗側読み取り用のペイロード設計（必要に応じて変更）
+  // 例: sarco:member:Uxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+  return `${TENANT}:${APPKEY}:${userId}`;
+}
+
+let qr;
+function generateQR(text) {
+  const wrap = document.getElementById('qrcode');
+  wrap.innerHTML = "";
+  qr = new QRCode(wrap, {
+    text,
+    width: 200,
+    height: 200,
+    correctLevel: QRCode.CorrectLevel.M
+  });
+}
+
+bootstrap().catch(err => {
+  console.error(err);
+  alert("初期化に失敗しました。LIFF設定やネットワークを確認してください。");
+});
+</script>
+</body>
+</html>
